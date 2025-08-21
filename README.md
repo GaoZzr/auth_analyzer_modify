@@ -1,3 +1,14 @@
+#越权测试插件
+##针对原版auth_analyzer插件做出部分修改
+###
+-添加汉化
+-添加域名黑白名单功能
+-添加展示筛选完整url
+-添加复制看板中所有url
+<img width="1918" height="926" alt="image" src="https://github.com/user-attachments/assets/7b6a377e-5e8b-4f9e-b7a0-cbd1594db0f4" />
+
+源项目插件地址：https://github.com/simioni87/auth_analyzer
+
 # Auth Analyzer
 ### Table of Contents
 - [What is it?](#what-is-it)
