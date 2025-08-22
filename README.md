@@ -12,6 +12,8 @@
 
 -添加复制看板中所有url
 
+-修复原插件Swing UI渲染问题
+
 <img width="1918" height="926" alt="image" src="https://github.com/user-attachments/assets/7b6a377e-5e8b-4f9e-b7a0-cbd1594db0f4" />
 
 

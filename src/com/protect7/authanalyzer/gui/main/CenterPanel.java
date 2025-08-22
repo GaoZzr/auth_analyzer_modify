@@ -292,6 +292,42 @@ public class CenterPanel extends JPanel {
 		}
 	}
 
+	/**
+	 * 强制刷新UI组件
+	 * 用于解决标签页切换时的渲染问题
+	 */
+	public void forceRefreshUI() {
+		// 刷新表格面板
+		if (tablePanel != null) {
+			tablePanel.revalidate();
+			tablePanel.repaint();
+		}
+		
+		// 刷新消息视图面板
+		if (messageViewPanel != null) {
+			messageViewPanel.revalidate();
+			messageViewPanel.repaint();
+		}
+		
+		// 刷新表格
+		if (table != null) {
+			table.revalidate();
+			table.repaint();
+		}
+		
+		// 刷新分割面板
+		if (splitPane != null) {
+			splitPane.revalidate();
+			splitPane.repaint();
+		}
+		
+		// 刷新顶部面板
+		if (topPanel != null) {
+			topPanel.revalidate();
+			topPanel.repaint();
+		}
+	}
+
 	public void updateOtherTabbedPane(int tabbedPaneId, int index) {
 		if (syncTabCheckBox.isSelected()) {
 			boolean pending = false;

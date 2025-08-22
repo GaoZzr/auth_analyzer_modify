@@ -30,6 +30,32 @@ public class MainPanel extends JPanel {
 		configurationPanel.loadAutoStoredData();
 	}
 	
+	/**
+	 * 强制刷新整个UI面板
+	 * 用于解决标签页切换时的渲染问题
+	 */
+	public void forceRefreshUI() {
+		// 刷新当前面板
+		revalidate();
+		repaint();
+		
+		// 刷新分割面板
+		if (splitPane != null) {
+			splitPane.revalidate();
+			splitPane.repaint();
+		}
+		
+		// 刷新配置面板
+		if (configurationPanel != null) {
+			configurationPanel.forceRefreshUI();
+		}
+		
+		// 刷新中心面板
+		if (centerPanel != null) {
+			centerPanel.forceRefreshUI();
+		}
+	}
+	
 	public void updateDividerLocation() {
 		double configPanelHeight = configurationPanel.getPreferredSize().getHeight();
 		double currentSize = getSize().getHeight();
