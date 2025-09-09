@@ -92,9 +92,20 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 					}
 				}
 				if(!showDuplicates.isSelected()) {
-					String endpoint = entry.getStringValue(1).toString() + entry.getStringValue(2).toString() 
-							+ entry.getStringValue(3).toString();	
-					if(tableModel.isDuplicate(Integer.parseInt(entry.getStringValue(0)), endpoint)) {
+					int id = Integer.parseInt(entry.getStringValue(0));
+					String method = entry.getStringValue(1);
+					String host = entry.getStringValue(2);
+					String fullUrl = entry.getStringValue(4);
+					byte[] requestBytes = null;
+					try {
+						OriginalRequestResponse orr = tableModel.getOriginalRequestResponseById(id);
+						if (orr != null && orr.getRequestResponse() != null) {
+							requestBytes = orr.getRequestResponse().getRequest();
+						}
+					}
+					catch (Exception ex) {}
+					// Collapse identical requests; for non-GET also include request body signature
+					if(tableModel.isDuplicateByRequestSignature(id, method, host, fullUrl, requestBytes)) {
 						return false;
 					}
 				}

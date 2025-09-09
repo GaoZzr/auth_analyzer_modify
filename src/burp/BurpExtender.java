@@ -1,8 +1,6 @@
 package burp;
 
 import java.awt.Component;
-import java.awt.event.ComponentEvent;
-import java.awt.event.ComponentListener;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -33,9 +31,9 @@ public class BurpExtender implements IBurpExtender, ITab, IExtensionStateListene
 		callbacks.registerHttpListener(httpListener);
 		callbacks.registerProxyListener(httpListener);
 		callbacks.registerExtensionStateListener(this);
-		callbacks.printOutput(Globals.EXTENSION_NAME + " 修改版");
-		callbacks.printOutput("基于版本修改 " + Globals.VERSION);
-
+		callbacks.printOutput(Globals.EXTENSION_NAME + " successfully started");
+		callbacks.printOutput("Version " + Globals.VERSION);
+		callbacks.printOutput("Created by Simon Reinhart");
 	}
 
 	@Override
@@ -45,56 +43,7 @@ public class BurpExtender implements IBurpExtender, ITab, IExtensionStateListene
 
 	@Override
 	public Component getUiComponent() {
-		// 添加组件可见性监听器来修复UI渲染问题
-		mainPanel.addComponentListener(new ComponentListener() {
-			@Override
-			public void componentShown(ComponentEvent e) {
-				// 当标签页重新显示时，强制刷新UI
-				SwingUtilities.invokeLater(() -> {
-					// 使用MainPanel的专用刷新方法
-					mainPanel.forceRefreshUI();
-					// 额外延迟刷新，确保所有组件都已完全显示
-					SwingUtilities.invokeLater(() -> {
-						mainPanel.forceRefreshUI();
-					});
-				});
-			}
-
-			@Override
-			public void componentHidden(ComponentEvent e) {
-				// 标签页隐藏时的处理（如果需要）
-			}
-
-			@Override
-			public void componentMoved(ComponentEvent e) {
-				// 组件移动时的处理
-			}
-
-			@Override
-			public void componentResized(ComponentEvent e) {
-				// 组件大小改变时的处理
-			}
-		});
 		return mainPanel;
-	}
-	
-	/**
-	 * 递归刷新所有子组件
-	 */
-	private void refreshAllComponents(Component component) {
-		if (component == null) return;
-		
-		// 刷新当前组件
-		component.revalidate();
-		component.repaint();
-		
-		// 如果是容器，递归刷新子组件
-		if (component instanceof java.awt.Container) {
-			java.awt.Container container = (java.awt.Container) component;
-			for (Component child : container.getComponents()) {
-				refreshAllComponents(child);
-			}
-		}
 	}
 	
 	private void addAuthAnalyzerMenu() {

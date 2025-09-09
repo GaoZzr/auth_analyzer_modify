@@ -2,11 +2,13 @@ package com.protect7.authanalyzer.gui.util;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+// removed unused digest imports
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import com.protect7.authanalyzer.entities.OriginalRequestResponse;
 import com.protect7.authanalyzer.util.BypassConstants;
 import com.protect7.authanalyzer.util.CurrentConfig;
+import com.protect7.authanalyzer.util.RequestSignatureHelper;
 
 public class RequestTableModel extends AbstractTableModel {
 
@@ -20,6 +22,40 @@ public class RequestTableModel extends AbstractTableModel {
 	}
 	
 	public synchronized void addNewRequestResponse(OriginalRequestResponse requestResponse) {
+		// If this is a true duplicate by multi-dimensional signature (will be folded), do not set comment.
+		// Otherwise (same path but different query/body), set comment to the first occurrence ID by path.
+		try {
+			String sig = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
+			boolean hasSameSignatureEarlier = false;
+			for (OriginalRequestResponse existing : originalRequestResponseList) {
+				if (RequestSignatureHelper.computeMultiDimSignature(existing).equals(sig)) {
+					hasSameSignatureEarlier = true;
+					break;
+				}
+			}
+			if (!hasSameSignatureEarlier) {
+				String pathOnly = extractPathOnly(requestResponse.getUrl());
+				Integer firstIdSamePath = null;
+				for (OriginalRequestResponse existing : originalRequestResponseList) {
+					String existingPath = extractPathOnly(existing.getUrl());
+					if (existingPath.equals(pathOnly)) {
+						if (firstIdSamePath == null || existing.getId() < firstIdSamePath) {
+							firstIdSamePath = existing.getId();
+						}
+					}
+				}
+				if (firstIdSamePath != null) {
+					requestResponse.setComment("重复ID:" + firstIdSamePath);
+				} else {
+					requestResponse.setComment("");
+				}
+			} else {
+				requestResponse.setComment("");
+			}
+		}
+		catch (Exception e) {
+			// ignore
+		}
 		originalRequestResponseList.add(requestResponse);
 		final int index = originalRequestResponseList.size()-1;
 		SwingUtilities.invokeLater(new Runnable() {
@@ -30,6 +66,21 @@ public class RequestTableModel extends AbstractTableModel {
 			}
 		});
 	}
+
+	private String extractPathOnly(String url) {
+		if (url == null) {
+			return "";
+		}
+		String pathOnly = url;
+		int q = url.indexOf('?');
+		if (q >= 0) {
+			pathOnly = url.substring(0, q);
+		}
+		if (pathOnly.length() > 1 && pathOnly.endsWith("/")) {
+			pathOnly = pathOnly.substring(0, pathOnly.length() - 1);
+		}
+		return pathOnly;
+	}
 	
 	public boolean isDuplicate(int id, String endpoint) {
 		for(OriginalRequestResponse requestResponse : originalRequestResponseList) {
@@ -38,6 +89,91 @@ public class RequestTableModel extends AbstractTableModel {
 			}
 		}
 		return false;
+	}
+	
+	/**
+	 * Checks if there is an earlier request with the same Method+Host+Path (ignoring query string).
+	 */
+	public boolean isDuplicateByEndpointNoQuery(int id, String method, String host, String url) {
+		String targetKey = buildEndpointKeyNoQuery(method, host, url);
+		for (OriginalRequestResponse requestResponse : originalRequestResponseList) {
+			String currentKey = buildEndpointKeyNoQuery(requestResponse.getMethod(), requestResponse.getHost(), requestResponse.getUrl());
+			if (currentKey.equals(targetKey) && requestResponse.getId() < id) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Checks if there is an earlier request with the same Method+Host+FullUrl (including query string).
+	 */
+	public boolean isDuplicateByFullUrl(int id, String method, String host, String fullUrl) {
+		String targetKey = (method == null ? "" : method) + (host == null ? "" : host) + (fullUrl == null ? "" : fullUrl);
+		for (OriginalRequestResponse requestResponse : originalRequestResponseList) {
+			String currentFullUrl = requestResponse.getFullUrl();
+			String currentKey = requestResponse.getMethod() + requestResponse.getHost() + (currentFullUrl == null ? "" : currentFullUrl);
+			if (currentKey.equals(targetKey) && requestResponse.getId() < id) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Duplicate check that also considers request body for non-GET methods.
+	 * For GET/HEAD, falls back to full URL only. For others, uses full URL + SHA-256 of request bytes.
+	 */
+	public boolean isDuplicateByRequestSignature(int id, String method, String host, String fullUrl, byte[] requestBytes) {
+		// Use helper to compute normalized multi-dim signature
+		String targetKey;
+		// Build a lightweight ORR-like signature for target using method, host, URL and raw request if available
+		String pathPlusQuery = (fullUrl == null) ? "" : fullUrl.substring(fullUrl.indexOf(host) + host.length());
+		String pseudoUrl = pathPlusQuery;
+		OriginalRequestResponseSignatureProxy proxy = new OriginalRequestResponseSignatureProxy(id, method, host, pseudoUrl, requestBytes);
+		targetKey = RequestSignatureHelper.computeMultiDimSignature(proxy);
+		for (OriginalRequestResponse requestResponse : originalRequestResponseList) {
+			String currentKey = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
+			if (currentKey.equals(targetKey) && requestResponse.getId() < id) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Minimal proxy to reuse signature helper without changing entities
+	private static class OriginalRequestResponseSignatureProxy extends OriginalRequestResponse {
+		public OriginalRequestResponseSignatureProxy(int id, String method, String host, String url, byte[] requestBytes) {
+			super(id, new burp.IHttpRequestResponse() {
+				@Override public byte[] getRequest() { return requestBytes; }
+				@Override public void setRequest(byte[] message) {}
+				@Override public byte[] getResponse() { return null; }
+				@Override public void setResponse(byte[] message) {}
+				@Override public String getComment() { return null; }
+				@Override public void setComment(String comment) {}
+				@Override public String getHighlight() { return null; }
+				@Override public void setHighlight(String color) {}
+				@Override public burp.IHttpService getHttpService() { return new burp.IHttpService() {
+					@Override public String getHost() { return host; }
+					@Override public int getPort() { return 0; }
+					@Override public String getProtocol() { return ""; }
+				}; }
+				@Override public void setHttpService(burp.IHttpService httpService) {}
+			}, method, url, "", 0, 0);
+		}
+	}
+
+	private String buildEndpointKeyNoQuery(String method, String host, String url) {
+		String pathOnly = url;
+		int q = url == null ? -1 : url.indexOf('?');
+		if (q >= 0) {
+			pathOnly = url.substring(0, q);
+		}
+		// Normalize trailing slash: treat "/path" and "/path/" as the same
+		if (pathOnly != null && pathOnly.length() > 1 && pathOnly.endsWith("/")) {
+			pathOnly = pathOnly.substring(0, pathOnly.length() - 1);
+		}
+		return (method == null ? "" : method) + (host == null ? "" : host) + (pathOnly == null ? "" : pathOnly);
 	}
 	
 	public void deleteRequestResponse(OriginalRequestResponse requestResponse) {

@@ -87,7 +87,7 @@ public class CenterPanel extends JPanel {
 	private final JSplitPane splitPane;
 	private final JButton clearTableButton;
 	private final JCheckBox showOnlyMarked = new JCheckBox("已标记", false);
-	private final JCheckBox showDuplicates = new JCheckBox("重复项", true);
+	private final JCheckBox showDuplicates = new JCheckBox("重复项(完全相同URL)", true);
 	private final JCheckBox showBypassed = new JCheckBox("状态 " + BypassConstants.SAME.getName(), true);
 	private final JCheckBox showPotentialBypassed = new JCheckBox("状态 " + BypassConstants.SIMILAR.getName(), true);
 	private final JCheckBox showNotBypassed = new JCheckBox("状态 " + BypassConstants.DIFFERENT.getName(), true);
@@ -115,6 +115,7 @@ public class CenterPanel extends JPanel {
 		filterText = new PlaceholderTextField(20);
 		filterText.setPlaceholder("输入搜索模式...");
 		searchButton.addActionListener(e -> tableModel.fireTableDataChanged());
+		showDuplicates.setToolTipText("关闭后，仅折叠完全相同的 Method+Host+完整URL（包含查询参数）");
 		JPanel searchPanel = new JPanel();
 		searchPanel.add(filterText);
 		searchPanel.add(searchButton);
@@ -289,42 +290,6 @@ public class CenterPanel extends JPanel {
 			for (Column column : Column.getDefaultSet()) {
 				columnSet.add(column);
 			}
-		}
-	}
-
-	/**
-	 * 强制刷新UI组件
-	 * 用于解决标签页切换时的渲染问题
-	 */
-	public void forceRefreshUI() {
-		// 刷新表格面板
-		if (tablePanel != null) {
-			tablePanel.revalidate();
-			tablePanel.repaint();
-		}
-		
-		// 刷新消息视图面板
-		if (messageViewPanel != null) {
-			messageViewPanel.revalidate();
-			messageViewPanel.repaint();
-		}
-		
-		// 刷新表格
-		if (table != null) {
-			table.revalidate();
-			table.repaint();
-		}
-		
-		// 刷新分割面板
-		if (splitPane != null) {
-			splitPane.revalidate();
-			splitPane.repaint();
-		}
-		
-		// 刷新顶部面板
-		if (topPanel != null) {
-			topPanel.revalidate();
-			topPanel.repaint();
 		}
 	}
 
@@ -836,11 +801,11 @@ public class CenterPanel extends JPanel {
 				return;
 			}
 			
-			// 构建包含所有 FullUrl 的字符串
+			// 仅复制当前可见（过滤/排序后）行的 FullUrl
 			StringBuilder fullUrls = new StringBuilder();
-			for (int row = 0; row < tableModel.getRowCount(); row++) {
-				// 获取 FullUrl 列的值（列索引 4）
-				Object fullUrlValue = tableModel.getValueAt(row, 4);
+			for (int viewRow = 0; viewRow < table.getRowCount(); viewRow++) {
+				int modelRow = table.convertRowIndexToModel(viewRow);
+				Object fullUrlValue = tableModel.getValueAt(modelRow, 4);
 				if (fullUrlValue != null && !fullUrlValue.toString().trim().isEmpty()) {
 					fullUrls.append(fullUrlValue.toString()).append("\n");
 				}

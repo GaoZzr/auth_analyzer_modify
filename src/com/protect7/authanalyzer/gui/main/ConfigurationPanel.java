@@ -772,35 +772,5 @@ public class ConfigurationPanel extends JPanel {
 		return inputs;
 	}
 
-	/**
-	 * 强制刷新UI组件
-	 * 用于解决标签页切换时的渲染问题
-	 */
-	public void forceRefreshUI() {
-		// 刷新当前面板
-		revalidate();
-		repaint();
-		
-		// 刷新会话标签面板
-		if (sessionTabbedPane != null) {
-			sessionTabbedPane.revalidate();
-			sessionTabbedPane.repaint();
-		}
-		
-		// 刷新过滤器面板
-		if (filterPanel != null) {
-			filterPanel.revalidate();
-			filterPanel.repaint();
-		}
-		
-		// 刷新所有会话面板
-		for (SessionPanel sessionPanel : sessionPanelMap.values()) {
-			if (sessionPanel != null) {
-				sessionPanel.revalidate();
-				sessionPanel.repaint();
-			}
-		}
-	}
-
 
 }
