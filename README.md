@@ -20,6 +20,10 @@ V1.3版本修改
 -修复原插件Swing UI渲染问题
 
 -添加多维签名去重优化看板数据
+启用多维去重后 同接口同参数将在看板显示进行去重，同接口不同参数会在看板展示，并标记评论ID为首条相同接口
+
+<img width="1436" height="690" alt="image" src="https://github.com/user-attachments/assets/c706b891-1562-41bd-af00-f4dc2f13b547" />
+
 
 <img width="1918" height="926" alt="image" src="https://github.com/user-attachments/assets/7b6a377e-5e8b-4f9e-b7a0-cbd1594db0f4" />
 
