@@ -36,6 +36,8 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.RowSorterEvent;
 import javax.swing.event.RowSorterListener;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import com.protect7.authanalyzer.entities.AnalyzerRequestResponse;
 import com.protect7.authanalyzer.entities.OriginalRequestResponse;
 import com.protect7.authanalyzer.entities.Session;
@@ -87,7 +89,7 @@ public class CenterPanel extends JPanel {
 	private final JSplitPane splitPane;
 	private final JButton clearTableButton;
 	private final JCheckBox showOnlyMarked = new JCheckBox("已标记", false);
-	private final JCheckBox showDuplicates = new JCheckBox("重复项(完全相同URL)", true);
+	private final JCheckBox showDuplicates = new JCheckBox("重复项(多维去重)", true);
 	private final JCheckBox showBypassed = new JCheckBox("状态 " + BypassConstants.SAME.getName(), true);
 	private final JCheckBox showPotentialBypassed = new JCheckBox("状态 " + BypassConstants.SIMILAR.getName(), true);
 	private final JCheckBox showNotBypassed = new JCheckBox("状态 " + BypassConstants.DIFFERENT.getName(), true);
@@ -532,6 +534,20 @@ public class CenterPanel extends JPanel {
 			}
 		});
         table.setRowSorter(sorter);
+        // Ensure view refreshes promptly after model changes to avoid delayed repaint until hover
+        tableModel.addTableModelListener(new TableModelListener() {
+            @Override
+            public void tableChanged(TableModelEvent e) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        try { sorter.sort(); } catch (Exception ignore) {}
+                        table.revalidate();
+                        table.repaint();
+                    }
+                });
+            }
+        });
         updateColumnWidths();
 	}
 

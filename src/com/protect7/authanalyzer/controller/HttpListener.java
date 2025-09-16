@@ -17,8 +17,20 @@ public class HttpListener implements IHttpListener, IProxyListener {
 
 	@Override
 	public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo) {
-		if(config.isRunning() && (!messageIsRequest || (messageIsRequest && config.isDropOriginal() && toolFlag == IBurpExtenderCallbacks.TOOL_PROXY))) {		
-			if(!isFiltered(toolFlag, messageInfo)) {
+		// Analyze exactly once per exchange:
+		// - Normal mode: analyze on response (messageIsRequest == false) so we have the original response
+		// - Drop-original mode: analyze on request (no original response will arrive)
+		if(config.isRunning()) {
+			boolean shouldAnalyze = false;
+			if (!messageIsRequest) {
+				// Always analyze on response in normal mode
+				shouldAnalyze = true;
+			}
+			else if (messageIsRequest && toolFlag == IBurpExtenderCallbacks.TOOL_PROXY && config.isDropOriginal()) {
+				// If we drop original, there will be no response; analyze at request time
+				shouldAnalyze = true;
+			}
+			if(shouldAnalyze && !isFiltered(toolFlag, messageInfo)) {
 				config.performAuthAnalyzerRequest(messageInfo);
 			}
 		}
@@ -27,8 +39,9 @@ public class HttpListener implements IHttpListener, IProxyListener {
 	@Override
 	public void processProxyMessage(boolean messageIsRequest, IInterceptedProxyMessage message) {
 		if(config.isDropOriginal() && messageIsRequest) {
+			// Analysis is handled by IHttpListener.processHttpMessage to avoid duplicate processing.
+			// Here we only drop the original request if it would not be filtered.
 			if(!isFiltered(IBurpExtenderCallbacks.TOOL_PROXY, message.getMessageInfo())) {
-				processHttpMessage(IBurpExtenderCallbacks.TOOL_PROXY, true, message.getMessageInfo());
 				message.setInterceptAction(IInterceptedProxyMessage.ACTION_DROP);
 			}
 		}

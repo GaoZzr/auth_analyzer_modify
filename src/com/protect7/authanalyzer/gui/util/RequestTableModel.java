@@ -2,6 +2,8 @@ package com.protect7.authanalyzer.gui.util;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 // removed unused digest imports
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
@@ -16,6 +18,8 @@ public class RequestTableModel extends AbstractTableModel {
 	private final ArrayList<OriginalRequestResponse> originalRequestResponseList = new ArrayList<OriginalRequestResponse>();
 	private final CurrentConfig config = CurrentConfig.getCurrentConfig();
 	private final int STATIC_COLUMN_COUNT = 8;
+	// Signatures muted (tombstoned) by user deletion so duplicates remain hidden
+	private final Set<String> mutedSignatures = new HashSet<String>();
 	
 	public ArrayList<OriginalRequestResponse> getOriginalRequestResponseList() {
 		return originalRequestResponseList;
@@ -35,17 +39,9 @@ public class RequestTableModel extends AbstractTableModel {
 			}
 			if (!hasSameSignatureEarlier) {
 				String pathOnly = extractPathOnly(requestResponse.getUrl());
-				Integer firstIdSamePath = null;
-				for (OriginalRequestResponse existing : originalRequestResponseList) {
-					String existingPath = extractPathOnly(existing.getUrl());
-					if (existingPath.equals(pathOnly)) {
-						if (firstIdSamePath == null || existing.getId() < firstIdSamePath) {
-							firstIdSamePath = existing.getId();
-						}
-					}
-				}
-				if (firstIdSamePath != null) {
-					requestResponse.setComment("重复ID:" + firstIdSamePath);
+				Integer representativeId = findFirstVisibleRepresentativeIdForPath(pathOnly);
+				if (representativeId != null) {
+					requestResponse.setComment("重复ID:" + representativeId);
 				} else {
 					requestResponse.setComment("");
 				}
@@ -80,6 +76,45 @@ public class RequestTableModel extends AbstractTableModel {
 			pathOnly = pathOnly.substring(0, pathOnly.length() - 1);
 		}
 		return pathOnly;
+	}
+
+	// Returns the first visible representative id for the given path (ignoring query),
+	// skipping entries that are effectively hidden by folding (earlier same signature)
+	// or muted by user deletion.
+	private Integer findFirstVisibleRepresentativeIdForPath(String pathOnly) {
+		Integer bestId = null;
+		for (OriginalRequestResponse existing : originalRequestResponseList) {
+			String existingPath = extractPathOnly(existing.getUrl());
+			if (!existingPath.equals(pathOnly)) {
+				continue;
+			}
+			try {
+				String sig = RequestSignatureHelper.computeMultiDimSignature(existing);
+				// Skip if muted
+				if (mutedSignatures.contains(sig)) {
+					continue;
+				}
+				// Skip if there exists an even earlier same-signature entry (folded)
+				boolean foldedByEarlierSameSig = false;
+				for (OriginalRequestResponse prev : originalRequestResponseList) {
+					if (prev.getId() < existing.getId()) {
+						String prevSig = RequestSignatureHelper.computeMultiDimSignature(prev);
+						if (sig.equals(prevSig)) {
+							foldedByEarlierSameSig = true;
+							break;
+						}
+					}
+				}
+				if (foldedByEarlierSameSig) {
+					continue;
+				}
+				if (bestId == null || existing.getId() < bestId) {
+					bestId = existing.getId();
+				}
+			}
+			catch (Exception ignore) {}
+		}
+		return bestId;
 	}
 	
 	public boolean isDuplicate(int id, String endpoint) {
@@ -132,6 +167,9 @@ public class RequestTableModel extends AbstractTableModel {
 		String pseudoUrl = pathPlusQuery;
 		OriginalRequestResponseSignatureProxy proxy = new OriginalRequestResponseSignatureProxy(id, method, host, pseudoUrl, requestBytes);
 		targetKey = RequestSignatureHelper.computeMultiDimSignature(proxy);
+		if (mutedSignatures.contains(targetKey)) {
+			return true;
+		}
 		for (OriginalRequestResponse requestResponse : originalRequestResponseList) {
 			String currentKey = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
 			if (currentKey.equals(targetKey) && requestResponse.getId() < id) {
@@ -177,6 +215,13 @@ public class RequestTableModel extends AbstractTableModel {
 	}
 	
 	public void deleteRequestResponse(OriginalRequestResponse requestResponse) {
+		try {
+			String sig = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
+			if (sig != null && sig.length() > 0) {
+				mutedSignatures.add(sig);
+			}
+		}
+		catch (Exception ignore) {}
 		originalRequestResponseList.remove(requestResponse);
 		SwingUtilities.invokeLater(new Runnable() {			
 			@Override
@@ -188,6 +233,7 @@ public class RequestTableModel extends AbstractTableModel {
 	
 	public void clearRequestMap() {
 		originalRequestResponseList.clear();
+		mutedSignatures.clear();
 		fireTableDataChanged();
 	}
 	

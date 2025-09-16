@@ -42,7 +42,6 @@ import com.protect7.authanalyzer.filter.InScopeFilter;
 import com.protect7.authanalyzer.filter.MethodFilter;
 import com.protect7.authanalyzer.filter.OnlyProxyFilter;
 import com.protect7.authanalyzer.filter.PathFilter;
-import com.protect7.authanalyzer.filter.QueryFilter;
 import com.protect7.authanalyzer.filter.RequestFilter;
 import com.protect7.authanalyzer.filter.StatusCodeFilter;
 
@@ -181,14 +180,6 @@ public class ConfigurationPanel extends JPanel {
 				"输入要排除的路径字符串，用逗号分隔。\r\n例如: log, libraries");
 		filterPanel.add(pathFilterButton);
 
-		HintCheckBox queryFilterButton = new HintCheckBox("排除查询参数");
-		queryFilterButton.setSelected(false);
-		addFilter(
-				new QueryFilter(filterPanel.getComponentCount(),
-						"排除包含指定字符串的GET查询参数"),
-				queryFilterButton,
-				"输入要排除的查询字符串，用逗号分隔。\r\n例如: log, core");
-		filterPanel.add(queryFilterButton);
 
 		// 添加域名白名单过滤器
 		DomainWhitelistFilter domainWhitelistFilter = new DomainWhitelistFilter(filterPanel.getComponentCount(),
