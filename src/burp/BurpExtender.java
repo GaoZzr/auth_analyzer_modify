@@ -33,7 +33,7 @@ public class BurpExtender implements IBurpExtender, ITab, IExtensionStateListene
 		callbacks.registerExtensionStateListener(this);
 		callbacks.printOutput(Globals.EXTENSION_NAME + " successfully started");
 		callbacks.printOutput("Version " + Globals.VERSION);
-		callbacks.printOutput("Created by Simon Reinhart");
+		callbacks.printOutput("Created by " + Globals.AUTHOR);
 	}
 
 	@Override

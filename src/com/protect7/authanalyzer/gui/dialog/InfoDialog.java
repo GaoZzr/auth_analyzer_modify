@@ -27,11 +27,11 @@ public class InfoDialog extends JDialog {
 		dialogPanel.setBorder(new EmptyBorder(10, 50, 30, 50));
 		dialogPanel.setLayout(new GridLayout(0, 1, 10, 10));
 
-		JLabel title = new JLabel("<html><strong>Auth Analyzer</strong></html>");
+		JLabel title = new JLabel("<html><strong>" + Globals.EXTENSION_NAME + "</strong></html>");
 		title.putClientProperty("html.disable", null);
 		add(title);
 		add(new JLabel("Version: " + Globals.VERSION));
-		add(new JLabel("Developed by: Simon Reinhart"));
+		add(new JLabel("Developed by: " + Globals.AUTHOR));
 		add(new JSeparator());
 		
 		JButton helpButton = new JButton("Help");

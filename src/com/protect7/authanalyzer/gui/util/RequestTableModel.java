@@ -26,25 +26,12 @@ public class RequestTableModel extends AbstractTableModel {
 	}
 	
 	public synchronized void addNewRequestResponse(OriginalRequestResponse requestResponse) {
-		// If this is a true duplicate by multi-dimensional signature (will be folded), do not set comment.
-		// Otherwise (same path but different query/body), set comment to the first occurrence ID by path.
+		// Always check for same path and set comment ID if found, regardless of signature duplication
 		try {
-			String sig = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
-			boolean hasSameSignatureEarlier = false;
-			for (OriginalRequestResponse existing : originalRequestResponseList) {
-				if (RequestSignatureHelper.computeMultiDimSignature(existing).equals(sig)) {
-					hasSameSignatureEarlier = true;
-					break;
-				}
-			}
-			if (!hasSameSignatureEarlier) {
-				String pathOnly = extractPathOnly(requestResponse.getUrl());
-				Integer representativeId = findFirstVisibleRepresentativeIdForPath(pathOnly);
-				if (representativeId != null) {
-					requestResponse.setComment("重复ID:" + representativeId);
-				} else {
-					requestResponse.setComment("");
-				}
+			String pathOnly = extractPathOnly(requestResponse.getUrl());
+			Integer representativeId = findFirstVisibleRepresentativeIdForPath(pathOnly);
+			if (representativeId != null) {
+				requestResponse.setComment("重复ID:" + representativeId);
 			} else {
 				requestResponse.setComment("");
 			}
