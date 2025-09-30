@@ -47,7 +47,7 @@
 
 <img width="1915" height="960" alt="image" src="https://github.com/user-attachments/assets/725a2c32-9ad0-4a8e-8b88-dfdbe422bbad" />
 
-源项目插件地址：https://github.com/simioni87/auth_analyzer
+原项目插件地址：https://github.com/simioni87/auth_analyzer
 
 # Auth Analyzer
 ### Table of Contents
