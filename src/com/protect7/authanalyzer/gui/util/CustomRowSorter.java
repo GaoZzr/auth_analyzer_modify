@@ -1,6 +1,8 @@
 package com.protect7.authanalyzer.gui.util;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import javax.swing.JCheckBox;
 import javax.swing.RowFilter;
 import javax.swing.RowSorter;
@@ -14,6 +16,11 @@ import com.protect7.authanalyzer.util.BypassConstants;
 import com.protect7.authanalyzer.util.CurrentConfig;
 
 public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
+	
+	// 搜索索引缓存
+	private final Map<Integer, String> requestContentCache = new HashMap<Integer, String>();
+	private final Map<Integer, String> responseContentCache = new HashMap<Integer, String>();
+	private volatile boolean indexBuilt = false;
 	
 	public CustomRowSorter(CenterPanel centerPanel, RequestTableModel tableModel, JCheckBox showOnlyMarked, JCheckBox showDuplicates, JCheckBox showBypassed, 
 			JCheckBox showPotentialBypassed, JCheckBox showNotBypassed, JCheckBox showNA, PlaceholderTextField filterText,
@@ -29,6 +36,8 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 		setMaxSortKeys(1);
         setSortKeys(Collections.singletonList(new RowSorter.SortKey(0, SortOrder.DESCENDING)));
 		
+		// 构建搜索索引
+		buildSearchIndex();
 		
 		RowFilter<Object, Object> filter = new RowFilter<Object, Object>() {
 			
@@ -45,15 +54,11 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 					if(searchInRequest.isSelected() && !doShow) {	
 						try {
 							int id = Integer.parseInt(entry.getStringValue(0));
-							for (Session session : CurrentConfig.getCurrentConfig().getSessions()) {
-								AnalyzerRequestResponse analyzerRequestResponse = session.getRequestResponseMap().get(id);
-								if(analyzerRequestResponse.getRequestResponse().getRequest() != null) {
-									String response = new String(analyzerRequestResponse.getRequestResponse().getRequest());
-									boolean contained = response.contains(filterText.getText());
-									if((contained && !negativeSearch.isSelected()) || (!contained && negativeSearch.isSelected())) {
-										doShow = true;
-										break;
-									}
+							String requestContent = requestContentCache.get(id);
+							if (requestContent != null) {
+								boolean contained = requestContent.contains(filterText.getText());
+								if((contained && !negativeSearch.isSelected()) || (!contained && negativeSearch.isSelected())) {
+									doShow = true;
 								}
 							}
 						}
@@ -64,15 +69,11 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 					if(searchInResponse.isSelected() && !doShow) {	
 						try {
 							int id = Integer.parseInt(entry.getStringValue(0));
-							for (Session session : CurrentConfig.getCurrentConfig().getSessions()) {
-								AnalyzerRequestResponse analyzerRequestResponse = session.getRequestResponseMap().get(id);
-								if(analyzerRequestResponse.getRequestResponse().getResponse() != null) {
-									String response = new String(analyzerRequestResponse.getRequestResponse().getResponse());
-									boolean contained = response.contains(filterText.getText());
-									if((contained && !negativeSearch.isSelected()) || (!contained && negativeSearch.isSelected())) {
-										doShow = true;
-										break;
-									}
+							String responseContent = responseContentCache.get(id);
+							if (responseContent != null) {
+								boolean contained = responseContent.contains(filterText.getText());
+								if((contained && !negativeSearch.isSelected()) || (!contained && negativeSearch.isSelected())) {
+									doShow = true;
 								}
 							}
 						}
@@ -91,7 +92,11 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 						return false;
 					}
 				}
-				if(!showDuplicates.isSelected()) {
+				if(showDuplicates.isSelected()) {
+					// 当勾选"重复项"时，显示所有请求（包括重复的）
+					// 不进行重复检测过滤
+				} else {
+					// 当不勾选"重复项"时，隐藏重复的请求
 					int id = Integer.parseInt(entry.getStringValue(0));
 					String method = entry.getStringValue(1);
 					String host = entry.getStringValue(2);
@@ -142,5 +147,57 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 		};
 		
 		setRowFilter(filter);
+	}
+	
+	/**
+	 * 构建搜索索引，缓存请求和响应内容
+	 */
+	private void buildSearchIndex() {
+		if (indexBuilt) {
+			return;
+		}
+		
+		try {
+			for (Session session : CurrentConfig.getCurrentConfig().getSessions()) {
+				for (Map.Entry<Integer, AnalyzerRequestResponse> entry : session.getRequestResponseMap().entrySet()) {
+					int id = entry.getKey();
+					AnalyzerRequestResponse arr = entry.getValue();
+					
+					// 缓存请求内容
+					if (arr.getRequestResponse() != null && arr.getRequestResponse().getRequest() != null) {
+						if (!requestContentCache.containsKey(id)) {
+							requestContentCache.put(id, new String(arr.getRequestResponse().getRequest()));
+						}
+					}
+					
+					// 缓存响应内容
+					if (arr.getRequestResponse() != null && arr.getRequestResponse().getResponse() != null) {
+						if (!responseContentCache.containsKey(id)) {
+							responseContentCache.put(id, new String(arr.getRequestResponse().getResponse()));
+						}
+					}
+				}
+			}
+			indexBuilt = true;
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * 清理索引缓存
+	 */
+	public void clearIndex() {
+		requestContentCache.clear();
+		responseContentCache.clear();
+		indexBuilt = false;
+	}
+	
+	/**
+	 * 重建索引
+	 */
+	public void rebuildIndex() {
+		clearIndex();
+		buildSearchIndex();
 	}
 }

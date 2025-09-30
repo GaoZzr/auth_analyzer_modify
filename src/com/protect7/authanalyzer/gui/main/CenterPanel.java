@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
@@ -150,15 +151,27 @@ public class CenterPanel extends JPanel {
 		JButton exportDataButton = new JButton("导出表格数据");
 		exportDataButton.addActionListener(e -> { 
 			exportDataButton.setIcon(loaderImageIcon);
-			new Thread(new Runnable() {
-				
-				@Override
-				public void run() {
-					new DataExportDialog(CenterPanel.this);
+			exportDataButton.setEnabled(false);
+			
+			// 使用CompletableFuture进行异步导出
+			CompletableFuture.runAsync(() -> {
+				new DataExportDialog(CenterPanel.this);
+			}).thenRun(() -> {
+				// 在EDT线程中恢复按钮状态
+				SwingUtilities.invokeLater(() -> {
 					exportDataButton.setIcon(null);
-				}
-			}).start();			
+					exportDataButton.setEnabled(true);
+				});
+			}).exceptionally(throwable -> {
+				// 处理异常
+				SwingUtilities.invokeLater(() -> {
+					exportDataButton.setIcon(null);
+					exportDataButton.setEnabled(true);
+					// 可以显示错误消息
+				});
+				return null;
 			});
+		});
 		tableConfigPanel.add(exportDataButton);
 		
 		JButton copyUrlsButton = new JButton("复制URL");
@@ -324,30 +337,32 @@ public class CenterPanel extends JPanel {
 					diffPane.setText(getHTMLCenterText("消息太大，无法计算差异。"));
 				} else {
 					diffPane.setText(getHTMLCenterText("计算差异中..."));
-					new Thread(new Runnable() {
-
-						@Override
-						public void run() {
-							Diff_match_patch dmp = new Diff_match_patch();
-							LinesToCharsResult a = dmp.diff_linesToChars(msg1, msg2);
-							String lineText1 = a.getChars1();
-							String lineText2 = a.getChars2();
-							List<String> lineArray = a.getLineArray();
-							LinkedList<Diff> diffs = dmp.diff_main(lineText1, lineText2, false);
-							dmp.diff_charsToLines(diffs, lineArray);
-							final String diffPaneText = getHTMLfromDiff(diffs);
+					
+					// 使用CompletableFuture进行异步计算
+					CompletableFuture.supplyAsync(() -> {
+						Diff_match_patch dmp = new Diff_match_patch();
+						LinesToCharsResult a = dmp.diff_linesToChars(msg1, msg2);
+						String lineText1 = a.getChars1();
+						String lineText2 = a.getChars2();
+						List<String> lineArray = a.getLineArray();
+						LinkedList<Diff> diffs = dmp.diff_main(lineText1, lineText2, false);
+						dmp.diff_charsToLines(diffs, lineArray);
+						return getHTMLfromDiff(diffs);
+					}).thenAccept(diffPaneText -> {
+						// 在EDT线程中更新UI
+						SwingUtilities.invokeLater(() -> {
 							diffPane.setText(diffPaneText);
-							SwingUtilities.invokeLater(new Runnable() {
-
-								@Override
-								public void run() {
-									comparisonScrollPane.getVerticalScrollBar().setValue(0);
-									comparisonScrollPane.getHorizontalScrollBar().setValue(0);
-									messageViewPanel.revalidate();
-								}
-							});
-						}
-					}).start();
+							comparisonScrollPane.getVerticalScrollBar().setValue(0);
+							comparisonScrollPane.getHorizontalScrollBar().setValue(0);
+							messageViewPanel.revalidate();
+						});
+					}).exceptionally(throwable -> {
+						// 处理异常
+						SwingUtilities.invokeLater(() -> {
+							diffPane.setText(getHTMLCenterText("计算差异时出错: " + throwable.getMessage()));
+						});
+						return null;
+					});
 				}
 			}
 		}
@@ -480,19 +495,25 @@ public class CenterPanel extends JPanel {
 
 	public void clearTablePressed() {
 		clearTableButton.setIcon(loaderImageIcon);
-		if (config.isRunning()) {
-			config.getAnalyzerThreadExecutor().execute(new Runnable() {
-
-				@Override
-				public void run() {
-					clearTable();
-					clearTableButton.setIcon(null);
-				}
-			});
-		} else {
+		clearTableButton.setEnabled(false);
+		
+		// 使用CompletableFuture进行异步清除
+		CompletableFuture.runAsync(() -> {
 			clearTable();
-			clearTableButton.setIcon(null);
-		}
+		}).thenRun(() -> {
+			// 在EDT线程中恢复按钮状态
+			SwingUtilities.invokeLater(() -> {
+				clearTableButton.setIcon(null);
+				clearTableButton.setEnabled(true);
+			});
+		}).exceptionally(throwable -> {
+			// 处理异常
+			SwingUtilities.invokeLater(() -> {
+				clearTableButton.setIcon(null);
+				clearTableButton.setEnabled(true);
+			});
+			return null;
+		});
 	}
 
 	public void clearTable() {
@@ -541,7 +562,11 @@ public class CenterPanel extends JPanel {
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        try { sorter.sort(); } catch (Exception ignore) {}
+                        try { 
+                            sorter.sort(); 
+                            // 重建搜索索引
+                            sorter.rebuildIndex();
+                        } catch (Exception ignore) {}
                         table.revalidate();
                         table.repaint();
                     }

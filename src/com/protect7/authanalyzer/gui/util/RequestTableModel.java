@@ -2,8 +2,12 @@ package com.protect7.authanalyzer.gui.util;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 // removed unused digest imports
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
@@ -20,6 +24,18 @@ public class RequestTableModel extends AbstractTableModel {
 	private final int STATIC_COLUMN_COUNT = 8;
 	// Signatures muted (tombstoned) by user deletion so duplicates remain hidden
 	private final Set<String> mutedSignatures = new HashSet<String>();
+	
+	// 批量更新相关字段
+	private final ArrayList<OriginalRequestResponse> pendingUpdates = new ArrayList<OriginalRequestResponse>();
+	private Timer batchUpdateTimer;
+	private static final int BATCH_SIZE = 50; // 批量大小
+	private static final int BATCH_DELAY_MS = 100; // 延迟时间
+	private volatile boolean batchUpdateScheduled = false;
+	
+	// 缓存相关字段
+	private final Map<String, Integer> pathToFirstIdCache = new HashMap<String, Integer>();
+	private final Map<Integer, String> signatureCache = new HashMap<Integer, String>();
+	private final Map<String, Boolean> duplicateCache = new HashMap<String, Boolean>();
 	
 	public ArrayList<OriginalRequestResponse> getOriginalRequestResponseList() {
 		return originalRequestResponseList;
@@ -40,14 +56,64 @@ public class RequestTableModel extends AbstractTableModel {
 			// ignore
 		}
 		originalRequestResponseList.add(requestResponse);
-		final int index = originalRequestResponseList.size()-1;
-		SwingUtilities.invokeLater(new Runnable() {
+		pendingUpdates.add(requestResponse);
+		
+		// 批量更新逻辑
+		if (pendingUpdates.size() >= BATCH_SIZE) {
+			flushPendingUpdates();
+		} else {
+			scheduleBatchUpdate();
+		}
+	}
+	
+	/**
+	 * 立即刷新待更新的数据
+	 */
+	private synchronized void flushPendingUpdates() {
+		if (!pendingUpdates.isEmpty()) {
+			int startIndex = originalRequestResponseList.size() - pendingUpdates.size();
+			int endIndex = originalRequestResponseList.size() - 1;
+			pendingUpdates.clear();
 			
-			@Override
-			public void run() {
-				fireTableRowsInserted(index, index);
+			SwingUtilities.invokeLater(new Runnable() {
+				@Override
+				public void run() {
+					fireTableRowsInserted(startIndex, endIndex);
+				}
+			});
+		}
+		cancelBatchUpdateTimer();
+	}
+	
+	/**
+	 * 安排批量更新
+	 */
+	private synchronized void scheduleBatchUpdate() {
+		if (!batchUpdateScheduled) {
+			batchUpdateScheduled = true;
+			if (batchUpdateTimer != null) {
+				batchUpdateTimer.cancel();
 			}
-		});
+			batchUpdateTimer = new Timer("BatchUpdateTimer", true);
+			batchUpdateTimer.schedule(new TimerTask() {
+				@Override
+				public void run() {
+					flushPendingUpdates();
+					batchUpdateScheduled = false;
+				}
+			}, BATCH_DELAY_MS);
+		}
+	}
+	
+	/**
+	 * 取消批量更新定时器
+	 */
+	private void cancelBatchUpdateTimer() {
+		if (batchUpdateTimer != null) {
+			batchUpdateTimer.cancel();
+			batchUpdateTimer = null;
+		}
+		batchUpdateScheduled = false;
 	}
 
 	private String extractPathOnly(String url) {
@@ -69,39 +135,64 @@ public class RequestTableModel extends AbstractTableModel {
 	// skipping entries that are effectively hidden by folding (earlier same signature)
 	// or muted by user deletion.
 	private Integer findFirstVisibleRepresentativeIdForPath(String pathOnly) {
+		// 先从缓存查找
+		Integer cachedId = pathToFirstIdCache.get(pathOnly);
+		if (cachedId != null) {
+			return cachedId;
+		}
+		
 		Integer bestId = null;
+		Map<String, Integer> signatureToFirstId = new HashMap<String, Integer>();
+		
 		for (OriginalRequestResponse existing : originalRequestResponseList) {
 			String existingPath = extractPathOnly(existing.getUrl());
 			if (!existingPath.equals(pathOnly)) {
 				continue;
 			}
 			try {
-				String sig = RequestSignatureHelper.computeMultiDimSignature(existing);
+				String sig = getOrComputeSignature(existing);
 				// Skip if muted
 				if (mutedSignatures.contains(sig)) {
 					continue;
 				}
-				// Skip if there exists an even earlier same-signature entry (folded)
-				boolean foldedByEarlierSameSig = false;
-				for (OriginalRequestResponse prev : originalRequestResponseList) {
-					if (prev.getId() < existing.getId()) {
-						String prevSig = RequestSignatureHelper.computeMultiDimSignature(prev);
-						if (sig.equals(prevSig)) {
-							foldedByEarlierSameSig = true;
-							break;
-						}
-					}
+				
+				// 检查是否有更早的相同签名
+				Integer firstIdForSig = signatureToFirstId.get(sig);
+				if (firstIdForSig != null && firstIdForSig < existing.getId()) {
+					continue; // 被更早的相同签名折叠
 				}
-				if (foldedByEarlierSameSig) {
-					continue;
-				}
+				
+				// 更新签名到ID的映射
+				signatureToFirstId.put(sig, existing.getId());
+				
 				if (bestId == null || existing.getId() < bestId) {
 					bestId = existing.getId();
 				}
 			}
 			catch (Exception ignore) {}
 		}
+		
+		// 缓存结果
+		if (bestId != null) {
+			pathToFirstIdCache.put(pathOnly, bestId);
+		}
+		
 		return bestId;
+	}
+	
+	/**
+	 * 获取或计算签名，使用缓存
+	 */
+	private String getOrComputeSignature(OriginalRequestResponse orr) {
+		Integer id = orr.getId();
+		String cachedSig = signatureCache.get(id);
+		if (cachedSig != null) {
+			return cachedSig;
+		}
+		
+		String sig = RequestSignatureHelper.computeMultiDimSignature(orr);
+		signatureCache.put(id, sig);
+		return sig;
 	}
 	
 	public boolean isDuplicate(int id, String endpoint) {
@@ -147,6 +238,13 @@ public class RequestTableModel extends AbstractTableModel {
 	 * For GET/HEAD, falls back to full URL only. For others, uses full URL + SHA-256 of request bytes.
 	 */
 	public boolean isDuplicateByRequestSignature(int id, String method, String host, String fullUrl, byte[] requestBytes) {
+		// 构建缓存键
+		String cacheKey = id + "|" + method + "|" + host + "|" + fullUrl;
+		Boolean cachedResult = duplicateCache.get(cacheKey);
+		if (cachedResult != null) {
+			return cachedResult;
+		}
+		
 		// Use helper to compute normalized multi-dim signature
 		String targetKey;
 		// Build a lightweight ORR-like signature for target using method, host, URL and raw request if available
@@ -155,14 +253,17 @@ public class RequestTableModel extends AbstractTableModel {
 		OriginalRequestResponseSignatureProxy proxy = new OriginalRequestResponseSignatureProxy(id, method, host, pseudoUrl, requestBytes);
 		targetKey = RequestSignatureHelper.computeMultiDimSignature(proxy);
 		if (mutedSignatures.contains(targetKey)) {
+			duplicateCache.put(cacheKey, true);
 			return true;
 		}
 		for (OriginalRequestResponse requestResponse : originalRequestResponseList) {
-			String currentKey = RequestSignatureHelper.computeMultiDimSignature(requestResponse);
+			String currentKey = getOrComputeSignature(requestResponse);
 			if (currentKey.equals(targetKey) && requestResponse.getId() < id) {
+				duplicateCache.put(cacheKey, true);
 				return true;
 			}
 		}
+		duplicateCache.put(cacheKey, false);
 		return false;
 	}
 
@@ -219,8 +320,14 @@ public class RequestTableModel extends AbstractTableModel {
 	}
 	
 	public void clearRequestMap() {
+		cancelBatchUpdateTimer();
 		originalRequestResponseList.clear();
+		pendingUpdates.clear();
 		mutedSignatures.clear();
+		// 清理缓存
+		pathToFirstIdCache.clear();
+		signatureCache.clear();
+		duplicateCache.clear();
 		fireTableDataChanged();
 	}
 	
